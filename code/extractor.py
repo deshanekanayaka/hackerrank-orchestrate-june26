@@ -14,6 +14,7 @@ Secrets are read from the ``ANTHROPIC_API_KEY`` env var only (AGENTS.md §6.2).
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 # CALL 1 uses the stronger reasoning model: ambiguous, multilingual transcripts
@@ -110,6 +111,34 @@ def _get_client() -> Any:
     return _client
 
 
+def _with_retry(fn: Any, max_retries: int = 3) -> Any:
+    import anthropic
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except anthropic.RateLimitError:
+            if attempt == max_retries - 1:
+                raise
+            wait = 2 ** attempt
+            print(f"\n  Rate limit hit, retrying in {wait}s...", flush=True)
+            time.sleep(wait)
+        except anthropic.APIStatusError as e:
+            if e.status_code == 529:
+                if attempt == max_retries - 1:
+                    raise
+                wait = 2 ** attempt
+                print(f"\n  API overloaded, retrying in {wait}s...", flush=True)
+                time.sleep(wait)
+            else:
+                raise
+        except anthropic.APIConnectionError:
+            if attempt == max_retries - 1:
+                raise
+            wait = 2 ** attempt
+            print(f"\n  Connection error, retrying in {wait}s...", flush=True)
+            time.sleep(wait)
+
+
 def build_system_prompt(claim_object: str) -> str:
     """Render the CALL 1 system prompt with the object-specific part list."""
     object_part_list = OBJECT_PARTS.get(claim_object, "unknown")
@@ -136,12 +165,12 @@ def extract_claim(user_claim: str, claim_object: str) -> dict[str, Any]:
     claim_summary. On any JSON parse / shape failure returns FALLBACK_CLAIM so
     the pipeline degrades safely rather than crashing on one bad row.
     """
-    response = _get_client().messages.create(
+    response = _with_retry(lambda: _get_client().messages.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
         system=build_system_prompt(claim_object),
         messages=[{"role": "user", "content": user_claim or ""}],
-    )
+    ))
     raw_text = response.content[0].text
 
     try:

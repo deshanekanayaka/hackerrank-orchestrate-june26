@@ -35,15 +35,26 @@ def main() -> None:
     history = load_user_history(USER_HISTORY_CSV)
     requirements = load_requirements(EVIDENCE_REQUIREMENTS_CSV)
 
-    predictions: list[dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     with CLAIMS_CSV.open(newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
             row["resolved_image_paths"] = resolve_image_paths(
                 row.get("image_paths", ""), DATASET_DIR
             )
-            predictions.append(agent.process_claim(row, history, requirements))
+            rows.append(row)
 
+    total = len(rows)
+    print(f"Loaded {total} claims. Starting pipeline...", flush=True)
+
+    predictions: list[dict[str, Any]] = []
+    for i, row in enumerate(rows, 1):
+        bar = "█" * i + "░" * (total - i)
+        print(f"\r[{bar}] {i}/{total} {row['user_id']} ({row['claim_object']})", end="", flush=True)
+        predictions.append(agent.process_claim(row, history, requirements))
+
+    print()
     output.write(predictions, OUTPUT_CSV)
+    print(f"✓ Done — {total} predictions written to output.csv")
 
 
 if __name__ == "__main__":

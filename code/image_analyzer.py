@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -172,6 +173,34 @@ def _get_client() -> Any:
 
         _client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
     return _client
+
+
+def _with_retry(fn: Any, max_retries: int = 3) -> Any:
+    import anthropic
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except anthropic.RateLimitError:
+            if attempt == max_retries - 1:
+                raise
+            wait = 2 ** attempt
+            print(f"\n  Rate limit hit, retrying in {wait}s...", flush=True)
+            time.sleep(wait)
+        except anthropic.APIStatusError as e:
+            if e.status_code == 529:
+                if attempt == max_retries - 1:
+                    raise
+                wait = 2 ** attempt
+                print(f"\n  API overloaded, retrying in {wait}s...", flush=True)
+                time.sleep(wait)
+            else:
+                raise
+        except anthropic.APIConnectionError:
+            if attempt == max_retries - 1:
+                raise
+            wait = 2 ** attempt
+            print(f"\n  Connection error, retrying in {wait}s...", flush=True)
+            time.sleep(wait)
 
 
 def _fallback(reason: str) -> dict[str, Any]:
@@ -336,7 +365,7 @@ def analyze_images(
     if not image_paths:
         return _fallback("No images submitted.")
 
-    response = _get_client().messages.create(
+    response = _with_retry(lambda: _get_client().messages.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
         system=build_system_prompt(claim_object, evidence_requirements),
@@ -348,7 +377,7 @@ def analyze_images(
                 ),
             }
         ],
-    )
+    ))
     raw_text = response.content[0].text
 
     try:
