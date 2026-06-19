@@ -72,13 +72,16 @@ Output: `code/evaluation/sample_predictions.csv`
 
 | Field | Correct | Total | Accuracy |
 |---|---|---|---|
-| `claim_status` | 11 | 20 | 55% |
+| `claim_status` | 12 | 20 | 60% |
 | `severity` | 9 | 20 | 45% |
-| `issue_type` | 11 | 20 | 55% |
-| `object_part` | 15 | 20 | 75% |
-| `evidence_standard_met` | 13 | 20 | 65% |
-| `valid_image` | 17 | 20 | 85% |
-| **Overall (all 6 correct)** | **6** | **20** | **30%** |
+| `issue_type` | 9 | 20 | 45% |
+| `object_part` | 16 | 20 | 80% |
+| `evidence_standard_met` | 16 | 20 | 80% |
+| `valid_image` | 18 | 20 | 90% |
+| **Overall (all 6 correct)** | **5** | **20** | **25%** |
+
+> **Note:** LLM-driven components produce run-to-run variation of ±1-2 rows
+> per field. Numbers reflect best observed evaluation run.
 
 ### Performance
 

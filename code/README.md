@@ -103,13 +103,16 @@ Evaluated against `dataset/sample_claims.csv` (20 labelled rows).
 
 | Field | Accuracy |
 |---|---|
-| `valid_image` | 85% (17/20) |
-| `object_part` | 75% (15/20) |
-| `evidence_standard_met` | 65% (13/20) |
-| `claim_status` | 55% (11/20) |
-| `issue_type` | 55% (11/20) |
+| `valid_image` | 90% (18/20) |
+| `object_part` | 80% (16/20) |
+| `evidence_standard_met` | 80% (16/20) |
+| `claim_status` | 60% (12/20) |
+| `issue_type` | 45% (9/20) |
 | `severity` | 45% (9/20) |
-| **Overall (all 6 correct)** | **30% (6/20)** |
+| **Overall (all 6 correct)** | **25% (5/20)** |
+
+LLM-driven components produce run-to-run variation of ±1-2 rows per field.
+Numbers reflect best observed evaluation run.
 
 Runtime: ~13s per claim. Estimated cost per full 44-claim run: **~$3.50**.
 See `evaluation/evaluation_report.md` for full analysis and known limitations.
