@@ -91,13 +91,16 @@ THEN, ACROSS ALL IMAGES, report:
   false when there is clear evidence of manipulation, or every image is unusable
   (corrupt-looking, fully obstructed, a screenshot of unrelated content, or the
   wrong object entirely).
-- evidence_standard_met: true if the image set provides reasonable visual
-  evidence to evaluate the claim against this evidence requirement:
+- evidence_standard_met: true if the images provide usable visual evidence
+  for this requirement:
 {evidence_requirement_text}
-  Judge it reasonably, not strictly: if the claimed part is visible and the
-  claimed condition can be assessed from the images, the standard is met.
-  valid_image can be true while evidence_standard_met is false (e.g. right
-  object, but wrong angle to assess the claimed condition).
+  Favor true for borderline cases where the claimed part is clearly visible
+  and the relevant condition can be judged, even if the photos are casual,
+  incomplete, or not ideal. This field measures assessability, not whether
+  the evidence is perfect or conclusive. Use false for genuinely unusable
+  evidence: wrong object, missing claimed part, unreadable/blurred image,
+  blocked view, or an angle that makes the claimed damage/condition
+  impossible to evaluate.
 - evidence_standard_met_reason: one short sentence, grounded in the images,
   explaining the evidence decision. Reference image_ids when useful.
 - candidate_supporting_image_ids: the image_ids in which the claimed object and
@@ -177,20 +180,21 @@ def _get_client() -> Any:
 
 def _with_retry(fn: Any, max_retries: int = 3) -> Any:
     import anthropic
+
     for attempt in range(max_retries):
         try:
             return fn()
         except anthropic.RateLimitError:
             if attempt == max_retries - 1:
                 raise
-            wait = 2 ** attempt
+            wait = 2**attempt
             print(f"\n  Rate limit hit, retrying in {wait}s...", flush=True)
             time.sleep(wait)
         except anthropic.APIStatusError as e:
             if e.status_code == 529:
                 if attempt == max_retries - 1:
                     raise
-                wait = 2 ** attempt
+                wait = 2**attempt
                 print(f"\n  API overloaded, retrying in {wait}s...", flush=True)
                 time.sleep(wait)
             else:
@@ -198,7 +202,7 @@ def _with_retry(fn: Any, max_retries: int = 3) -> Any:
         except anthropic.APIConnectionError:
             if attempt == max_retries - 1:
                 raise
-            wait = 2 ** attempt
+            wait = 2**attempt
             print(f"\n  Connection error, retrying in {wait}s...", flush=True)
             time.sleep(wait)
 
@@ -284,6 +288,7 @@ def _prepare_image(path: str) -> tuple[str, str]:
     if _is_avif(raw):
         import io
         from PIL import Image
+
         buf = io.BytesIO()
         Image.open(io.BytesIO(raw)).convert("RGB").save(buf, format="JPEG")
         return "image/jpeg", base64.standard_b64encode(buf.getvalue()).decode("ascii")
@@ -365,19 +370,21 @@ def analyze_images(
     if not image_paths:
         return _fallback("No images submitted.")
 
-    response = _with_retry(lambda: _get_client().messages.create(
-        model=MODEL,
-        max_tokens=MAX_TOKENS,
-        system=build_system_prompt(claim_object, evidence_requirements),
-        messages=[
-            {
-                "role": "user",
-                "content": _build_content(
-                    image_paths, claim_object, claimed_parts, claim_summary
-                ),
-            }
-        ],
-    ))
+    response = _with_retry(
+        lambda: _get_client().messages.create(
+            model=MODEL,
+            max_tokens=MAX_TOKENS,
+            system=build_system_prompt(claim_object, evidence_requirements),
+            messages=[
+                {
+                    "role": "user",
+                    "content": _build_content(
+                        image_paths, claim_object, claimed_parts, claim_summary
+                    ),
+                }
+            ],
+        )
+    )
     raw_text = response.content[0].text
 
     try:

@@ -47,7 +47,11 @@ MAX_TOKENS = 1024
 CALL3_STATUSES = ("supported", "contradicted")
 NOT_ENOUGH_INFO = "not_enough_information"
 
-VALID_SEVERITIES = ("low", "medium", "high", "none", "unknown")
+# CALL 3 is only asked for supported/contradicted, so it must return one of these.
+# "unknown" is reserved for the NEI short-circuit path and must never come from the model.
+CALL3_VALID_SEVERITIES = ("low", "medium", "high", "none")
+# Full set of valid severity values in the output row (includes NEI short-circuit value).
+ALL_SEVERITIES = ("low", "medium", "high", "none", "unknown")
 SEVERITY_UNKNOWN = "unknown"
 
 # Sentinel used in the CSV when a list-valued column is empty.
@@ -254,18 +258,25 @@ def build_context(
     return json.dumps(context, ensure_ascii=False, indent=2)
 
 
-def _finalize_verdict(context: str, candidates: list[str]) -> dict[str, str]:
+def _finalize_verdict(
+    context: str, candidates: list[str], user_id: str
+) -> dict[str, str]:
     """CALL 3: choose supported vs contradicted, severity, supporting ids, reason.
 
     On any parse/shape/validity failure, degrades safely to
     ``not_enough_information`` rather than crashing or guessing a direction.
+    A warning is printed whenever the fallback fires so silent NEI verdicts are
+    visible in the run log.
     """
-    fallback = {
-        "claim_status": NOT_ENOUGH_INFO,
-        "severity": SEVERITY_UNKNOWN,
-        "supporting_image_ids": NONE_TOKEN,
-        "claim_status_justification": "The verdict step could not adjudicate this claim.",
-    }
+    def _fallback(reason: str) -> dict[str, str]:
+        print(f"\n  Warning: CALL 3 fallback triggered for {user_id}: {reason}", flush=True)
+        return {
+            "claim_status": NOT_ENOUGH_INFO,
+            "severity": SEVERITY_UNKNOWN,
+            "supporting_image_ids": NONE_TOKEN,
+            "claim_status_justification": "The verdict step could not adjudicate this claim.",
+        }
+
     response = _get_client().messages.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
@@ -275,18 +286,20 @@ def _finalize_verdict(context: str, candidates: list[str]) -> dict[str, str]:
     try:
         data = json.loads(_strip_fences(response.content[0].text))
     except (json.JSONDecodeError, TypeError, ValueError, IndexError, AttributeError):
-        return fallback
+        return _fallback("could not parse JSON from model response")
     if not isinstance(data, dict) or not all(k in data for k in _REQUIRED_VERDICT_KEYS):
-        return fallback
+        return _fallback(f"model response missing required keys, got: {list(data.keys()) if isinstance(data, dict) else type(data).__name__}")
 
     status = data.get("claim_status")
     severity = data.get("severity")
-    if status not in CALL3_STATUSES or severity not in VALID_SEVERITIES:
-        return fallback
+    if status not in CALL3_STATUSES:
+        return _fallback(f"invalid claim_status {status!r} (expected one of {CALL3_STATUSES})")
+    if severity not in CALL3_VALID_SEVERITIES:
+        return _fallback(f"invalid severity {severity!r} (expected one of {CALL3_VALID_SEVERITIES})")
 
     justification = str(data.get("claim_status_justification", "")).strip()
     if not justification:
-        return fallback
+        return _fallback("empty claim_status_justification")
 
     return {
         "claim_status": status,
@@ -362,7 +375,7 @@ def process_claim(
         context = build_context(
             row, extraction, image_analysis, risk_flags, issue_family, evidence_reqs
         )
-        verdict = _finalize_verdict(context, candidates)
+        verdict = _finalize_verdict(context, candidates, user_id)
 
     # --- Assemble the 14-column prediction (sample_claims.csv order) --------
     return {

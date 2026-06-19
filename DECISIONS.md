@@ -1,3 +1,4 @@
+
 # Decisions & Bug Log
 
 ## Architecture Decisions
