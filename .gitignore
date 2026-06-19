@@ -1,1 +1,4 @@
 .env
+# Submission artifacts
+output.csv
+code/evaluation/sample_predictions.csv
