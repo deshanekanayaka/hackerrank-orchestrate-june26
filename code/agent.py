@@ -282,17 +282,26 @@ def process_claim(
     # --- Deterministic pre-LLM gates ----------------------------------------
     adversarial = escalation.adversarial_prefilter(user_claim)
 
+    # Evidence requirement is deterministic and CALL 2 consumes it, so resolve
+    # it before the image call.
+    evidence_reqs = escalation.get_evidence_requirement(claim_object, requirements)
+
     # --- CALL 1: structured claim extraction --------------------------------
     extraction = extractor.extract_claim(user_claim, claim_object)
 
     # --- CALL 2: image analysis (images are the source of truth) ------------
-    image_analysis = image_analyzer.analyze_images(image_paths, extraction)
+    image_analysis = image_analyzer.analyze_images(
+        image_paths,
+        claim_object,
+        extraction["claimed_parts"],
+        extraction["claim_summary"],
+        evidence_reqs,
+    )
 
     # --- Deterministic gates around the images ------------------------------
     issue_family = escalation.get_issue_family(
         extraction.get("primary_issue", "unknown"), claim_object
     )
-    evidence_requirements = escalation.get_evidence_requirement(claim_object, requirements)
     history_flags = escalation.get_history_flags(user_id, history)
 
     risk_flags = _merge_risk_flags(
@@ -316,7 +325,7 @@ def process_claim(
         }
     else:
         context = build_context(
-            row, extraction, image_analysis, risk_flags, issue_family, evidence_requirements
+            row, extraction, image_analysis, risk_flags, issue_family, evidence_reqs
         )
         verdict = _finalize_verdict(context, candidates)
 
