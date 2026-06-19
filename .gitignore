@@ -2,3 +2,4 @@
 # Submission artifacts
 output.csv
 code/evaluation/sample_predictions.csv
+.DS_Store
