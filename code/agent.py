@@ -84,6 +84,12 @@ DECISION RULES:
 Base this on the image findings (overall_part_visible, overall_issue_visible)
 and the extracted claim, NOT on the claimant's assertions alone.
 
+ISSUE-TYPE EQUIVALENCE (do NOT treat these as a mismatch or contradiction):
+- crack and glass_shatter are both acceptable for windshield/glass damage.
+- water_damage and stain are both acceptable for liquid damage.
+If the claim and the image findings differ only by one of these near-equivalent
+pairs, treat that as agreement, not a contradiction.
+
 SUPPORTING IMAGE IDS:
 - Choose ONLY from candidate_supporting_image_ids. Never invent an id.
 - Keep the image(s) your verdict actually relies on. For a contradicted claim
@@ -181,6 +187,31 @@ def _format_supporting_ids(ids: Any, candidates: list[str]) -> str:
     return ";".join(kept) if kept else NONE_TOKEN
 
 
+def _nonsupporting_flags(image_analysis: dict[str, Any]) -> list[str]:
+    """Return quality flags from non-supporting images only.
+
+    When CALL 2 finds a valid supporting image alongside a decoy/context image
+    that shows no damage, the decoy's flags (damage_not_visible, claim_mismatch)
+    must not poison CALL 3's verdict. Only flags from images NOT in
+    candidate_supporting_image_ids are passed to CALL 3.
+
+    Falls back to the full union when there are no candidates (the empty-candidate
+    case is handled by the NEI short-circuit before build_context is called, so
+    this fallback is a safety net only).
+    """
+    candidates = set(image_analysis.get("candidate_supporting_image_ids") or [])
+    if not candidates:
+        return image_analysis.get("image_quality_flags", [])
+    seen: list[str] = []
+    for img in image_analysis.get("per_image_analysis", []):
+        if img.get("image_id") in candidates:
+            continue
+        for flag in img.get("quality_flags", []):
+            if flag and flag not in seen:
+                seen.append(flag)
+    return seen
+
+
 def build_context(
     row: dict[str, Any],
     extraction: dict[str, Any],
@@ -193,6 +224,10 @@ def build_context(
 
     The raw transcript is included under an explicitly-labelled untrusted key so
     the model has full context while the system prompt's security rule applies.
+
+    image_quality_flags passed to CALL 3 is filtered to flags from non-supporting
+    images only (via _nonsupporting_flags). The full union is preserved in
+    risk_flags (the output row) for human reviewers — that path is unchanged.
     """
     context = {
         "claim_object": row.get("claim_object", ""),
@@ -209,7 +244,7 @@ def build_context(
             "candidate_supporting_image_ids": image_analysis.get(
                 "candidate_supporting_image_ids", []
             ),
-            "image_quality_flags": image_analysis.get("image_quality_flags", []),
+            "image_quality_flags": _nonsupporting_flags(image_analysis),
             "valid_image": image_analysis.get("valid_image"),
         },
         "issue_family": issue_family,

@@ -28,3 +28,21 @@
 - Multilingual: Hindi, Urdu, Spanish, mixed Chinese/English
 - history_flags column in user_history.csv copied directly into risk_flags
 - Max 3 images per claim
+
+## Bug Logging Rule
+
+Whenever a bug is found and fixed, append an entry to DECISIONS.md
+under the "Bugs Found & Fixed" section using this exact structure:
+
+**BUG N — Short description**
+File: code/filename.py → function_name()
+Found: what triggered the discovery (test, run, eval, inspection)
+Fix: what was changed and why
+Impact: which claims or fields were affected
+
+Rules:
+- N is the next sequential bug number
+- Always include the file path and function name
+- Always include how it was discovered, not just what it was
+- Always include the downstream impact (which output fields, how many rows)
+- Add the entry BEFORE committing the fix so the log and code stay in sync
