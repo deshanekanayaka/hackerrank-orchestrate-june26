@@ -1,7 +1,7 @@
 # Python dependencies for the evidence-review system.
-# Pin versions before submission for reproducibility (AGENTS.md §6.2).
-#
-# LLM/VLM SDK to be added once provider is chosen (anthropic | openai).
-anthropic
-python-dotenv
-pytest
+# Pinned for reproducibility (AGENTS.md §6.2).
+
+anthropic==0.111.0
+Pillow==12.1.0
+pytest==9.1.0
+python-dotenv==1.2.2
